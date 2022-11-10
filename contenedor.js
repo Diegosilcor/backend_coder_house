@@ -1,103 +1,102 @@
 const fs = require("fs");
 
 class Contenedor {
-  constructor() { }
-  
-  save(product, file) {
-
-    console.log("Guardando...", product);
-    let nextId = this.getNextId(file);
-    product.id = nextId;
-    const allProductsArray = this.read(file);
-    allProductsArray.push(product);
-    this.write(allProductsArray, file);
-
+  constructor(fileName) {
+    this._filename = fileName;
+    this._readFileOrCreateNewOne();
   }
 
-  getNextId(file) {
-    let lastId = 0;
-    let allProductsArray = this.read(file);
-    if (allProductsArray.length > 0) {
-      lastId = allProductsArray[allProductsArray.length - 1].id;
-    }
-    return lastId + 1;
-  }
-
-  read(file) {
-    let allProductsArray = [];
+  async _readFileOrCreateNewOne() {
     try {
-      let allProductsString = fs.readFileSync(file, "utf8");
-      allProductsString.length > 0
-        ? (allProductsArray = JSON.parse(allProductsString))
-        : (allProductsArray = []);
-    } catch (err) {
-      console.log("Error en la lectura del archivo", err);
+      await fs.promises.readFile(this._filename, "utf-8");
+    } catch (error) {
+      error.code === "ENOENT"
+        ? this._createEmptyFile()
+        : console.log(
+            `Error de codigo: ${error.code} |Error en la lectura del archivo 🚫 ${this._filename}`
+          );
     }
-    return allProductsArray;
   }
 
-  async write(allProductsArray, file) {
-    let allProductsString = JSON.stringify(allProductsArray);
+  async _createEmptyFile() {
+    fs.writeFile(this._filename, "[]", (error) => {
+      error
+        ? console.log(error)
+        : console.log(`Archivo ${this._filename} creado, ya que no existia en el sistema 🚫`);
+    });
+  }
+
+  async getById(id) {
     try {
-      await fs.writeFileSync(file, allProductsString);
-    } catch (err) {
-      console.log("Error en la escritura", err);
+      const data = await this.getData();
+      const parsedData = JSON.parse(data);
+
+      return parsedData.find((producto) => producto.id === id);
+    } catch (error) {
+      console.log(
+        `Error de codigo: ${error.code} | Hubo un error al intentar obtener el ID 🚫 (${id})`
+      );
     }
   }
 
-
-  getById(id, file) {
-    let allProductsArray = this.read(file);
-    let product = allProductsArray.find((product) => product.id == id);
-    return product ? product : null;
-  }
-
-
-  getAll(file) {
-    let allProductsArray = this.read(file);
-    return allProductsArray;
-  }
-
-
-  deleteById(id, file) {
-    let allProductsArray = this.read(file);
-    let index = allProductsArray.findIndex((product) => product.id == id);
-    if (index >= 0) {
-      allProductsArray.splice(index, 1);
-      let json = JSON.stringify(allProductsArray);
-      try {
-        fs.writeFileSync(file, json);
-        return id;
-      } catch (err) {
-        console.log("Error en la escritura", err);
-      }
-    }
-  }
-
-  deleteAll(file) {
-    let allProductsArray = [];
-    let allProductsString = JSON.stringify(allProductsArray);
+  async deleteById(id) {
     try {
-      fs.writeFileSync(file, allProductsString);
-    } catch (err) {
-      console.log("Error en la escritura", err);
-    }
-  }
+      const data = await this.getData();
+      const parsedData = JSON.parse(data);
+      const objectIdToBeRemoved = parsedData.find(
+        (producto) => producto.id === id
+      );
 
-  async createFile(file_path) {
-    try {
-      if (fs.existsSync(file_path)) {
-        console.log("El archivo ya existe, entonces no hago nada");
-        return false;
+      if (objectIdToBeRemoved) {
+        const index = parsedData.indexOf(objectIdToBeRemoved);
+        parsedData.splice(index, 1);
+        await fs.promises.writeFile(this._filename, JSON.stringify(parsedData));
       } else {
-        console.log("El archivo no existe, entonces lo creo!");
-        await fs.promises.writeFile(file_path, "", "utf8");
-        return true;
+        console.log(`ID ${id} no existe en nuestros archivos 🚫`);
+        return null;
       }
-    } catch (err) {
-      console.log("Error en la creación del archivo", err);
-      return false;
+    } catch (error) {
+      console.log(
+        `Error de codigo: ${error.code} | Hubo un error al intentar eliminar un elemento por su ID 🚫 (${id})`
+      );
     }
+  }
+
+  async save(object) {
+    try {
+      const allData = await this.getData();
+      const parsedData = JSON.parse(allData);
+
+      object.id = parsedData.length + 1;
+      parsedData.push(object);
+
+      await fs.promises.writeFile(this._filename, JSON.stringify(parsedData));
+      return object.id;
+    } catch (error) {
+      console.log(
+        `Error de codigo: ${error.code} | Hubo un error al intentar guardar su archivo 🚫`
+      );
+    }
+  }
+
+  async deleteAll() {
+    try {
+      await this._createEmptyFile();
+    } catch (error) {
+      console.log(
+        `Hubo un error (${error.code}) al intentar borrar los archivos 🚫`
+      );
+    }
+  }
+
+  async getData() {
+    const data = await fs.promises.readFile(this._filename, "utf-8");
+    return data;
+  }
+
+  async getAll() {
+    const data = await this.getData();
+    return JSON.parse(data);
   }
 }
 
